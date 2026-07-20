@@ -97,23 +97,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
       final source = _supportedLanguages[_sourceLang]!;
       final target = _supportedLanguages[_targetLang]!;
       
-      final modelManager = OnDeviceTranslatorModelManager();
-      
-      final bool sourceDownloaded = await modelManager.isModelDownloaded(source.bcpCode);
-      if (!sourceDownloaded) {
-        setState(() => _translatedText = "Téléchargement du modèle: $_sourceLang (patientez, ~30 Mo)...");
-        final s = await modelManager.downloadModel(source.bcpCode);
-        if (!s) throw Exception("Impossible de télécharger le modèle $_sourceLang.");
-      }
-      
-      final bool targetDownloaded = await modelManager.isModelDownloaded(target.bcpCode);
-      if (!targetDownloaded) {
-        setState(() => _translatedText = "Téléchargement du modèle: $_targetLang (patientez, ~30 Mo)...");
-        final s = await modelManager.downloadModel(target.bcpCode);
-        if (!s) throw Exception("Impossible de télécharger le modèle $_targetLang.");
-      }
-      
-      setState(() => _translatedText = "Traduction en cours...");
+      setState(() => _translatedText = "Traduction en cours (ou téléchargement du modèle, patientez)...");
       
       final translator = OnDeviceTranslator(sourceLanguage: source, targetLanguage: target);
       final realTranslation = await translator.translateText(text);
@@ -131,9 +115,9 @@ class _TranslationScreenState extends State<TranslationScreen> {
         translated: realTranslation,
       );
       SyncService.syncTranslations();
-    } catch (e) {
+    } catch (e, stackTrace) {
       setState(() {
-        _translatedText = "Erreur de traduction: $e";
+        _translatedText = "Erreur: $e\n\nStack: ${stackTrace.toString().substring(0, (stackTrace.toString().length > 500) ? 500 : stackTrace.toString().length)}";
         _isTranslating = false;
       });
     }
