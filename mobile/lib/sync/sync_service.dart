@@ -6,10 +6,10 @@ class SyncService {
   static const String _backendUrl = 'https://offline-translator-production.up.railway.app';
   static const String _userId = 'device-12345';
 
-  static Future<void> syncTranslations() async {
+  static Future<int> syncTranslations() async {
     try {
       final unsynced = await LocalDatabase.instance.getUnsyncedTranslations();
-      if (unsynced.isEmpty) return;
+      if (unsynced.isEmpty) return 0;
 
       final payload = {
         "user_id": _userId,
@@ -22,12 +22,23 @@ class SyncService {
         }).toList()
       };
 
-      // Future http call here
-      await Future.delayed(const Duration(seconds: 1));
-      final idsToUpdate = unsynced.map((e) => e['id'] as int).toList();
-      await LocalDatabase.instance.markAsSynced(idsToUpdate);
+      final response = await http.post(
+        Uri.parse('$_backendUrl/sync'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final idsToUpdate = unsynced.map((e) => e['id'] as int).toList();
+        await LocalDatabase.instance.markAsSynced(idsToUpdate);
+        return idsToUpdate.length;
+      } else {
+        print("Erreur HTTP lors de la synchro: ${response.statusCode}");
+        return 0;
+      }
     } catch (e) {
-      print("Offline mode: Sync delayed.");
+      print("Erreur de connexion pour la synchro: $e");
+      return 0;
     }
   }
 }

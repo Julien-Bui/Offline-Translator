@@ -87,6 +87,28 @@ class _TranslationScreenState extends State<TranslationScreen> {
     });
   }
 
+  Future<bool> _promptDownload(String languageName) async {
+    return await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Téléchargement Requis'),
+        content: Text('Le modèle de traduction pour $languageName (~30 Mo) n\'est pas encore installé sur votre appareil.\n\nVoulez-vous le télécharger maintenant ?\nCela consommera des données internet.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+            child: const Text('Télécharger', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
+
   Future<void> _translate() async {
     final text = _inputController.text.trim();
     if (text.isEmpty) return;
@@ -96,8 +118,34 @@ class _TranslationScreenState extends State<TranslationScreen> {
     try {
       final source = _supportedLanguages[_sourceLang]!;
       final target = _supportedLanguages[_targetLang]!;
+
+      final modelManager = OnDeviceTranslatorModelManager();
       
-      setState(() => _translatedText = "Traduction en cours (ou téléchargement du modèle, patientez)...");
+      final bool sourceDownloaded = await modelManager.isModelDownloaded(source.bcpCode);
+      if (!sourceDownloaded) {
+        bool confirm = await _promptDownload(_sourceLang);
+        if (!confirm) {
+          setState(() { _isTranslating = false; _translatedText = "Traduction annulée : modèle $_sourceLang manquant."; });
+          return;
+        }
+        setState(() => _translatedText = "Téléchargement du modèle $_sourceLang en cours (~30 Mo)...");
+        final s = await modelManager.downloadModel(source.bcpCode);
+        if (!s) throw Exception("Impossible de télécharger le modèle $_sourceLang.");
+      }
+      
+      final bool targetDownloaded = await modelManager.isModelDownloaded(target.bcpCode);
+      if (!targetDownloaded) {
+        bool confirm = await _promptDownload(_targetLang);
+        if (!confirm) {
+          setState(() { _isTranslating = false; _translatedText = "Traduction annulée : modèle $_targetLang manquant."; });
+          return;
+        }
+        setState(() => _translatedText = "Téléchargement du modèle $_targetLang en cours (~30 Mo)...");
+        final s = await modelManager.downloadModel(target.bcpCode);
+        if (!s) throw Exception("Impossible de télécharger le modèle $_targetLang.");
+      }
+
+      setState(() => _translatedText = "Traduction en cours...");
       
       final translator = OnDeviceTranslator(sourceLanguage: source, targetLanguage: target);
       final realTranslation = await translator.translateText(text);
@@ -174,7 +222,12 @@ class _TranslationScreenState extends State<TranslationScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.sync, color: Colors.blueAccent),
-            onPressed: () => SyncService.syncTranslations(),
+            onPressed: () async {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Synchronisation vers Railway en cours...'), duration: Duration(seconds: 1)));
+              int count = await SyncService.syncTranslations();
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(count > 0 ? '$count traduction(s) synchronisée(s) !' : 'Déjà à jour ou erreur réseau.')));
+            },
           )
         ],
       ),
