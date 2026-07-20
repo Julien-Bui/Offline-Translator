@@ -1,53 +1,49 @@
-# 🌍 Offline-Translator : L'IA Embarquée (Offline-First)
+# 🌍 Offline-Translator: Embedded AI (Offline-First)
 
-Un traducteur universel pensé pour les environnements extrêmes (pas de réseau, mode avion). Ce projet démontre ma capacité à concevoir une architecture **"Edge AI"**, en faisant tourner des réseaux de neurones complexes (NLP) directement sur des processeurs mobiles de manière très optimisée (ONNX INT8).
+A universal translator designed for extreme environments (no network, airplane mode). This project demonstrates my ability to design an **"Edge AI"** architecture by running complex machine learning models (NLP) directly on mobile processors in a highly optimized way.
 
-Ce projet est un "Google Translate Offline" 100% fait-main.
-
----
-
-## 🚀 Fonctionnalités Clés
-- **Inférence Locale Ultra-Rapide (<30ms)** : Grâce à l'optimisation des modèles HuggingFace (MarianMT) au format ONNX avec quantisation INT8.
-- **Architecture Offline-First** : Traduction garantie sans Wi-Fi ni 4G. L'historique et le glossaire sont stockés sur le téléphone via **SQLite**.
-- **Synchronisation Cloud Intelligente** : Dès que le réseau revient, un *background worker* synchronise les données sur un serveur **FastAPI / PostgreSQL** (hébergé sur Railway).
-- **Consommation Optimisée** : Pensé pour préserver la RAM et la batterie du téléphone, le modèle pèse moins de 100 Mo.
+This project is a 100% custom-built "Google Translate Offline" alternative.
 
 ---
 
-## 🏗️ Architecture du Projet
+## 🚀 Key Features
+- **Ultra-Fast Local Inference (<30ms)**: Leveraging optimized on-device translation models (Google ML Kit).
+- **Offline-First Architecture**: Guaranteed translation without Wi-Fi or Cellular data. The translation history is securely stored on the device via **SQLite**.
+- **Smart Cloud Synchronization**: As soon as the network is available, you can synchronize your local data with a **FastAPI / PostgreSQL** server (hosted on Railway).
+- **Optimized Resource Consumption**: Designed to preserve RAM and battery life, with lightweight language models (around 30 MB per language pack).
+- **Explicit User Consent**: Language models are never downloaded silently. Users must explicitly grant permission before any data-intensive background download.
 
-L'architecture est scindée en 3 grandes parties :
-1. **Pipeline IA** : Conversion et compression des modèles.
-2. **Cloud Hub (Railway)** : API de gestion des modèles et synchronisation.
-3. **App Mobile (Flutter)** : Interface utilisateur et exécution locale (ONNX Runtime Mobile).
+---
+
+## 🏗️ Project Architecture
+
+The architecture is divided into two main components:
+1. **Cloud Hub (Railway)**: Sync API and remote database.
+2. **Mobile App (Flutter)**: User interface and local execution using on-device ML Kit models.
 
 ```mermaid
 graph TD
-    subgraph "1. IA (HuggingFace -> ONNX)"
-        HF[Modèle HuggingFace\nopus-mt-fr-en] -->|Optimum CLI| ONNX[Format ONNX\nINT8 Quantization]
-        ONNX -->|Poids: ~80 Mo| S3[(Stockage Cloud)]
+    subgraph "1. Cloud Hub (Railway)"
+        API[FastAPI Python API]
+        API <-->|Sync History| PG[(PostgreSQL\nRailway)]
     end
 
-    subgraph "2. Cloud Hub (Railway)"
-        S3 -->|Téléchargement Modèles| API[API FastAPI\nPython]
-        API <-->|Sync Historique| PG[(PostgreSQL\nRailway)]
-    end
-
-    subgraph "3. App Mobile (Flutter / Android)"
-        API -.->|1. Téléchargement pack de langue (Wi-Fi)| FS[Stockage Interne]
-        FS --> Moteur[ONNX Runtime Mobile]
+    subgraph "2. Mobile App (Flutter / Android)"
+        UI[Flutter Interface]
+        UI -.->|1. Download Language Pack| FS[Internal Storage]
+        FS --> Moteur[On-Device Translator\nML Kit]
         
-        UI[Interface Flutter] -->|Texte (Offline)| Moteur
-        Moteur -->|Traduction Locale| UI
+        UI -->|Text (Offline)| Moteur
+        Moteur -->|Local Translation| UI
         
-        UI -->|Sauvegarde Historique| SQL[(SQLite Local\nOffline-First)]
-        SQL -.->|2. Sync Background (Réseau dispo)| API
+        UI -->|Save History| SQL[(Offline-First\nSQLite)]
+        SQL -.->|2. Manual Sync (Network available)| API
     end
 ```
 
 ---
 
-## 🛠️ Stack Technologique
-- **IA & NLP** : `transformers`, `optimum`, `onnxruntime`
-- **Backend Cloud** : Python 3.10, FastAPI, SQLAlchemy, PostgreSQL, Docker (Déployé sur Railway)
-- **Application Mobile** : Flutter / Dart, `sqflite` (Base de données locale), `onnxruntime_flutter`
+## 🛠️ Technology Stack
+- **AI & NLP**: Google ML Kit Translation (On-Device Inference)
+- **Cloud Backend**: Python 3.10, FastAPI, SQLAlchemy, PostgreSQL, Docker (Deployed on Railway)
+- **Mobile Application**: Flutter / Dart, `sqflite` (Local database), `google_mlkit_translation`
