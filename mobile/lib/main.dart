@@ -43,6 +43,26 @@ class _TranslationScreenState extends State<TranslationScreen> {
   String _sourceLang = "Français";
   String _targetLang = "Anglais";
 
+  // Dictionnaire des langues supportées (Interface -> ML Kit)
+  final Map<String, TranslateLanguage> _supportedLanguages = {
+    "Français": TranslateLanguage.french,
+    "Anglais": TranslateLanguage.english,
+    "Espagnol": TranslateLanguage.spanish,
+    "Allemand": TranslateLanguage.german,
+    "Italien": TranslateLanguage.italian,
+    "Portugais": TranslateLanguage.portuguese,
+  };
+
+  // Dictionnaire pour la reconnaissance vocale (Interface -> Locale Android/iOS)
+  final Map<String, String> _sttLocales = {
+    "Français": "fr_FR",
+    "Anglais": "en_US",
+    "Espagnol": "es_ES",
+    "Allemand": "de_DE",
+    "Italien": "it_IT",
+    "Portugais": "pt_PT",
+  };
+
   @override
   void initState() {
     super.initState();
@@ -60,7 +80,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
       _targetLang = temp;
       
       // Swap texts visually as well if translation exists
-      if (_translatedText.isNotEmpty && !_translatedText.startsWith("[")) {
+      if (_translatedText.isNotEmpty && !_translatedText.startsWith("Erreur")) {
          _inputController.text = _translatedText;
          _translatedText = "";
       }
@@ -74,8 +94,8 @@ class _TranslationScreenState extends State<TranslationScreen> {
     setState(() { _isTranslating = true; });
 
     try {
-      final source = _sourceLang == "Français" ? TranslateLanguage.french : TranslateLanguage.english;
-      final target = _targetLang == "Français" ? TranslateLanguage.french : TranslateLanguage.english;
+      final source = _supportedLanguages[_sourceLang]!;
+      final target = _supportedLanguages[_targetLang]!;
       
       final translator = OnDeviceTranslator(sourceLanguage: source, targetLanguage: target);
       final realTranslation = await translator.translateText(text);
@@ -114,7 +134,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
             _inputController.text = val.recognizedWords;
           });
         },
-        localeId: _sourceLang == "Français" ? "fr_FR" : "en_US",
+        localeId: _sttLocales[_sourceLang] ?? "en_US",
       );
     }
   }
@@ -125,6 +145,19 @@ class _TranslationScreenState extends State<TranslationScreen> {
     if (_inputController.text.isNotEmpty) {
       _translate();
     }
+  }
+
+  Widget _buildLanguageDropdown(String currentValue, ValueChanged<String?> onChanged) {
+    return DropdownButton<String>(
+      value: currentValue,
+      underline: const SizedBox(), // Masque la ligne par défaut
+      icon: const Icon(Icons.arrow_drop_down, color: Colors.blueAccent),
+      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.blueAccent),
+      onChanged: onChanged,
+      items: _supportedLanguages.keys.map((lang) {
+        return DropdownMenuItem(value: lang, child: Text(lang));
+      }).toList(),
+    );
   }
 
   @override
@@ -145,19 +178,31 @@ class _TranslationScreenState extends State<TranslationScreen> {
       ),
       body: Column(
         children: [
-          // Language Bar
+          // Language Bar with Dropdowns
           Container(
             color: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                Expanded(child: Center(child: Text(_sourceLang, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueAccent)))),
+                Expanded(
+                  child: Center(
+                    child: _buildLanguageDropdown(_sourceLang, (val) {
+                      if (val != null) setState(() => _sourceLang = val);
+                    }),
+                  ),
+                ),
                 IconButton(
-                  icon: const Icon(Icons.swap_horiz, size: 30, color: Colors.grey),
+                  icon: const Icon(Icons.swap_horiz, size: 28, color: Colors.grey),
                   onPressed: _swapLanguages,
                 ),
-                Expanded(child: Center(child: Text(_targetLang, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueAccent)))),
+                Expanded(
+                  child: Center(
+                    child: _buildLanguageDropdown(_targetLang, (val) {
+                      if (val != null) setState(() => _targetLang = val);
+                    }),
+                  ),
+                ),
               ],
             ),
           ),
