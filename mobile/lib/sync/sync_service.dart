@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import '../db/local_db.dart';
 
 class SyncService {
-  static const String _backendUrl = 'https://ton-api-fastapi.up.railway.app';
+  static const String _backendUrl = 'https://offline-translator-production.up.railway.app';
   static const String _userId = 'device-12345';
 
   static Future<void> syncTranslations() async {
