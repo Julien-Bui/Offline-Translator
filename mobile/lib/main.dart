@@ -91,11 +91,29 @@ class _TranslationScreenState extends State<TranslationScreen> {
     final text = _inputController.text.trim();
     if (text.isEmpty) return;
     
-    setState(() { _isTranslating = true; });
+    setState(() { _isTranslating = true; _translatedText = "Vérification des modèles linguistiques..."; });
 
     try {
       final source = _supportedLanguages[_sourceLang]!;
       final target = _supportedLanguages[_targetLang]!;
+      
+      final modelManager = OnDeviceTranslatorModelManager();
+      
+      final bool sourceDownloaded = await modelManager.isModelDownloaded(source.bcpCode);
+      if (!sourceDownloaded) {
+        setState(() => _translatedText = "Téléchargement du modèle: $_sourceLang (patientez, ~30 Mo)...");
+        final s = await modelManager.downloadModel(source.bcpCode);
+        if (!s) throw Exception("Impossible de télécharger le modèle $_sourceLang.");
+      }
+      
+      final bool targetDownloaded = await modelManager.isModelDownloaded(target.bcpCode);
+      if (!targetDownloaded) {
+        setState(() => _translatedText = "Téléchargement du modèle: $_targetLang (patientez, ~30 Mo)...");
+        final s = await modelManager.downloadModel(target.bcpCode);
+        if (!s) throw Exception("Impossible de télécharger le modèle $_targetLang.");
+      }
+      
+      setState(() => _translatedText = "Traduction en cours...");
       
       final translator = OnDeviceTranslator(sourceLanguage: source, targetLanguage: target);
       final realTranslation = await translator.translateText(text);
