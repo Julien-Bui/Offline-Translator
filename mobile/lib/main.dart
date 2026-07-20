@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:google_mlkit_translation/google_mlkit_translation.dart';
 import 'db/local_db.dart';
 import 'sync/sync_service.dart';
 
@@ -72,22 +73,32 @@ class _TranslationScreenState extends State<TranslationScreen> {
     
     setState(() { _isTranslating = true; });
 
-    // Mock translation (to replace with real ML later)
-    await Future.delayed(const Duration(milliseconds: 400));
-    final fakeTranslation = "[Traduit en $_targetLang]: ${text.split('').reversed.join('')}";
-    
-    setState(() {
-      _translatedText = fakeTranslation;
-      _isTranslating = false;
-    });
+    try {
+      final source = _sourceLang == "Français" ? TranslateLanguage.french : TranslateLanguage.english;
+      final target = _targetLang == "Français" ? TranslateLanguage.french : TranslateLanguage.english;
+      
+      final translator = OnDeviceTranslator(sourceLanguage: source, targetLanguage: target);
+      final realTranslation = await translator.translateText(text);
+      await translator.close();
+      
+      setState(() {
+        _translatedText = realTranslation;
+        _isTranslating = false;
+      });
 
-    await LocalDatabase.instance.insertTranslation(
-      sourceLang: _sourceLang.substring(0, 2).toLowerCase(),
-      targetLang: _targetLang.substring(0, 2).toLowerCase(),
-      original: text,
-      translated: fakeTranslation,
-    );
-    SyncService.syncTranslations();
+      await LocalDatabase.instance.insertTranslation(
+        sourceLang: _sourceLang.substring(0, 2).toLowerCase(),
+        targetLang: _targetLang.substring(0, 2).toLowerCase(),
+        original: text,
+        translated: realTranslation,
+      );
+      SyncService.syncTranslations();
+    } catch (e) {
+      setState(() {
+        _translatedText = "Erreur de traduction: $e";
+        _isTranslating = false;
+      });
+    }
   }
 
   void _startListening() async {
@@ -121,7 +132,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text('Traduction', style: TextStyle(fontWeight: FontWeight.w600)),
+        title: const Text('Traduction Offline', style: TextStyle(fontWeight: FontWeight.w600)),
         centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
@@ -208,6 +219,12 @@ class _TranslationScreenState extends State<TranslationScreen> {
                       ),
                     ),
                   ),
+                
+                if (_isTranslating)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 10),
+                    child: Center(child: Text("Traduction (ou téléchargement du modèle hors-ligne si 1ère fois)...", style: TextStyle(color: Colors.grey, fontSize: 12))),
+                  )
               ],
             ),
           ),
