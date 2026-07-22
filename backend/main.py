@@ -3,12 +3,22 @@ from sqlalchemy.orm import Session
 from typing import List
 from pydantic import BaseModel
 import os
+from fastapi.security import APIKeyHeader
 
 from .database import engine, get_db, Base
 from . import models
 
 Base.metadata.create_all(bind=engine)
 app = FastAPI(title="Offline Translator Cloud Hub", version="1.0")
+
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+def get_api_key(api_key: str = Depends(api_key_header)):
+    # Mot de passe par défaut pour sécuriser l'API publique
+    admin_key = os.getenv("ADMIN_API_KEY", "offline-translator-admin-123")
+    if api_key == admin_key:
+        return api_key
+    raise HTTPException(status_code=403, detail="Clé API administrateur invalide ou manquante")
 
 class LanguageItem(BaseModel):
     name: str
@@ -46,7 +56,7 @@ def get_language_catalog(db: Session = Depends(get_db)):
     }
 
 @app.post("/catalog")
-def add_language(lang: LanguageItem, db: Session = Depends(get_db)):
+def add_language(lang: LanguageItem, db: Session = Depends(get_db), api_key: str = Depends(get_api_key)):
     # Vérifier si la langue existe déjà
     existing = db.query(models.LanguageCatalog).filter(models.LanguageCatalog.bcp47_code == lang.bcp47_code).first()
     if existing:
