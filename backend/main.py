@@ -33,7 +33,10 @@ def get_language_catalog(db: Session = Depends(get_db)):
                 {"name": "Espagnol", "bcp47_code": "es"},
                 {"name": "Allemand", "bcp47_code": "de"},
                 {"name": "Italien", "bcp47_code": "it"},
-                {"name": "Portugais", "bcp47_code": "pt"}
+                {"name": "Portugais", "bcp47_code": "pt"},
+                {"name": "Japonais", "bcp47_code": "ja"},
+                {"name": "Coréen", "bcp47_code": "ko"},
+                {"name": "Chinois", "bcp47_code": "zh"}
             ]
         }
     
