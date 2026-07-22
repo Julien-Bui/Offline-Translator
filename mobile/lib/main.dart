@@ -44,7 +44,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
   String _targetLang = "Anglais";
 
   // Dictionnaire des langues supportées (Interface -> ML Kit)
-  final Map<String, TranslateLanguage> _supportedLanguages = {
+  Map<String, TranslateLanguage> _supportedLanguages = {
     "Français": TranslateLanguage.french,
     "Anglais": TranslateLanguage.english,
     "Espagnol": TranslateLanguage.spanish,
@@ -162,7 +162,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
         original: text,
         translated: realTranslation,
       );
-      SyncService.syncTranslations();
+      // Les données restent uniquement en local (Privacy-First)
     } catch (e, stackTrace) {
       setState(() {
         _translatedText = "Erreur: $e\n\nStack: ${stackTrace.toString().substring(0, (stackTrace.toString().length > 500) ? 500 : stackTrace.toString().length)}";
@@ -223,10 +223,20 @@ class _TranslationScreenState extends State<TranslationScreen> {
           IconButton(
             icon: const Icon(Icons.sync, color: Colors.blueAccent),
             onPressed: () async {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Synchronisation vers Railway en cours...'), duration: Duration(seconds: 1)));
-              int count = await SyncService.syncTranslations();
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Mise à jour du catalogue des langues...'), duration: Duration(seconds: 1)));
+              final newCatalog = await SyncService.fetchLanguageCatalog();
               if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(count > 0 ? '$count traduction(s) synchronisée(s) !' : 'Déjà à jour ou erreur réseau.')));
+              
+              if (newCatalog != null && newCatalog.isNotEmpty) {
+                setState(() {
+                  _supportedLanguages = newCatalog;
+                  if (!_supportedLanguages.containsKey(_sourceLang)) _sourceLang = _supportedLanguages.keys.first;
+                  if (!_supportedLanguages.containsKey(_targetLang)) _targetLang = _supportedLanguages.keys.last;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Catalogue mis à jour avec succès !')));
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erreur réseau ou catalogue indisponible.')));
+              }
             },
           )
         ],

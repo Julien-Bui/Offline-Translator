@@ -1,44 +1,39 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../db/local_db.dart';
+import 'package:google_mlkit_translation/google_mlkit_translation.dart';
 
 class SyncService {
   static const String _backendUrl = 'https://offline-translator-production.up.railway.app';
-  static const String _userId = 'device-12345';
 
-  static Future<int> syncTranslations() async {
+  static Future<Map<String, TranslateLanguage>?> fetchLanguageCatalog() async {
     try {
-      final unsynced = await LocalDatabase.instance.getUnsyncedTranslations();
-      if (unsynced.isEmpty) return 0;
+      final response = await http.get(Uri.parse('$_backendUrl/catalog'));
 
-      final payload = {
-        "user_id": _userId,
-        "translations": unsynced.map((item) => {
-          "source_lang": item['sourceLang'],
-          "target_lang": item['targetLang'],
-          "original_text": item['original'],
-          "translated_text": item['translated'],
-          "timestamp": item['timestamp'],
-        }).toList()
-      };
-
-      final response = await http.post(
-        Uri.parse('$_backendUrl/sync'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(payload),
-      );
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final idsToUpdate = unsynced.map((e) => e['id'] as int).toList();
-        await LocalDatabase.instance.markAsSynced(idsToUpdate);
-        return idsToUpdate.length;
-      } else {
-        print("Erreur HTTP lors de la synchro: ${response.statusCode}");
-        return 0;
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['status'] == 'success') {
+          final List catalog = data['catalog'];
+          Map<String, TranslateLanguage> newSupportedLanguages = {};
+          for (var lang in catalog) {
+            try {
+              final bcp47 = lang['bcp47_code'];
+              // Map the BCP-47 string to ML Kit's TranslateLanguage enum
+              final enumVal = TranslateLanguage.values.firstWhere(
+                (e) => e.bcpCode == bcp47,
+              );
+              newSupportedLanguages[lang['name']] = enumVal;
+            } catch (_) {
+              // Ignore invalid/unsupported languages
+            }
+          }
+          return newSupportedLanguages;
+        }
       }
+      print("Erreur HTTP lors de la récupération du catalogue: ${response.statusCode}");
+      return null;
     } catch (e) {
-      print("Erreur de connexion pour la synchro: $e");
-      return 0;
+      print("Erreur de connexion pour le catalogue: $e");
+      return null;
     }
   }
 }

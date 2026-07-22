@@ -1,23 +1,10 @@
-from sqlalchemy import Column, Integer, String, DateTime, JSON
+from sqlalchemy import Column, Integer, String
 from .database import Base
-from datetime import datetime
 
-class TranslationHistory(Base):
-    __tablename__ = "translation_history"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(String, index=True, nullable=False)
-    source_lang = Column(String, nullable=False)
-    target_lang = Column(String, nullable=False)
-    original_text = Column(String, nullable=False)
-    translated_text = Column(String, nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow)
-    
-class AppModel(Base):
-    __tablename__ = "app_models"
+class LanguageCatalog(Base):
+    __tablename__ = "language_catalog"
     
     id = Column(Integer, primary_key=True, index=True)
-    language_pair = Column(String, unique=True, index=True, nullable=False)
-    version = Column(String, nullable=False)
-    download_url = Column(String, nullable=False)
-    size_mb = Column(Integer, nullable=False)
+    name = Column(String, unique=True, index=True, nullable=False) # e.g. "Français", "Anglais"
+    bcp47_code = Column(String, unique=True, nullable=False) # e.g. "fr_FR", "en_US" (or ML Kit specific)
+

@@ -10,48 +10,34 @@ from . import models
 Base.metadata.create_all(bind=engine)
 app = FastAPI(title="Offline Translator Cloud Hub", version="1.0")
 
-class TranslationItem(BaseModel):
-    source_lang: str
-    target_lang: str
-    original_text: str
-    translated_text: str
-    timestamp: str
-
-class SyncRequest(BaseModel):
-    user_id: str
-    translations: List[TranslationItem]
+class LanguageItem(BaseModel):
+    name: str
+    bcp47_code: str
 
 @app.get("/")
 def read_root():
-    return {"message": "Cloud Hub du Traducteur Offline (API)"}
+    return {"message": "Cloud Hub du Traducteur Offline (API Catalogue)"}
 
-@app.get("/models/latest")
-def get_latest_models(db: Session = Depends(get_db)):
+@app.get("/catalog")
+def get_language_catalog(db: Session = Depends(get_db)):
+    languages = db.query(models.LanguageCatalog).all()
+    
+    # Si la base est vide (premier lancement), on retourne quelques langues par défaut.
+    # Dans un vrai scénario, on remplirait la BDD.
+    if not languages:
+        return {
+            "status": "success",
+            "catalog": [
+                {"name": "Anglais", "bcp47_code": "en"},
+                {"name": "Français", "bcp47_code": "fr"},
+                {"name": "Espagnol", "bcp47_code": "es"},
+                {"name": "Allemand", "bcp47_code": "de"},
+                {"name": "Italien", "bcp47_code": "it"},
+                {"name": "Portugais", "bcp47_code": "pt"}
+            ]
+        }
+    
     return {
         "status": "success",
-        "models": [
-            {"pair": "fr-en", "version": "1.0", "size_mb": 85, "download_url": "/models/download/fr-en"},
-            {"pair": "en-zh", "version": "1.0", "size_mb": 90, "download_url": "/models/download/en-zh"}
-        ]
+        "catalog": [{"name": lang.name, "bcp47_code": lang.bcp47_code} for lang in languages]
     }
-
-@app.get("/models/download/{pair}")
-def download_model(pair: str):
-    return {"status": "redirect", "url": f"https://cdn.tondomaine.com/models/onnx_{pair}_quantized.zip"}
-
-@app.post("/sync")
-def sync_translations(sync_data: SyncRequest, db: Session = Depends(get_db)):
-    saved_count = 0
-    for item in sync_data.translations:
-        db_item = models.TranslationHistory(
-            user_id=sync_data.user_id,
-            source_lang=item.source_lang,
-            target_lang=item.target_lang,
-            original_text=item.original_text,
-            translated_text=item.translated_text
-        )
-        db.add(db_item)
-        saved_count += 1
-    
-    db.commit()
-    return {"status": "success", "synced_items": saved_count}
