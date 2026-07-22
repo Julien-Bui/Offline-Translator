@@ -41,3 +41,17 @@ def get_language_catalog(db: Session = Depends(get_db)):
         "status": "success",
         "catalog": [{"name": lang.name, "bcp47_code": lang.bcp47_code} for lang in languages]
     }
+
+@app.post("/catalog")
+def add_language(lang: LanguageItem, db: Session = Depends(get_db)):
+    # Vérifier si la langue existe déjà
+    existing = db.query(models.LanguageCatalog).filter(models.LanguageCatalog.bcp47_code == lang.bcp47_code).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Cette langue existe déjà dans le catalogue.")
+    
+    # Ajouter à la BDD
+    new_lang = models.LanguageCatalog(name=lang.name, bcp47_code=lang.bcp47_code)
+    db.add(new_lang)
+    db.commit()
+    
+    return {"status": "success", "message": f"La langue '{lang.name}' a été ajoutée avec succès au catalogue !"}
