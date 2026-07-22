@@ -25,19 +25,19 @@ The architecture is divided into two main components:
 graph TD
     subgraph "1. Cloud Hub (Railway)"
         API[FastAPI Python API]
-        API <-->|Read Languages| PG[(PostgreSQL\nLanguage Catalog)]
+        API <-->|Read Languages| PG["PostgreSQL Language Catalog"]
     end
 
     subgraph "2. Mobile App (Flutter / Android)"
         UI[Flutter Interface]
-        UI -.->|1. Fetch Catalog (Network)| API
+        UI -.->|1. Fetch Catalog via Network| API
         UI -.->|2. Download Language Pack| FS[Internal Storage]
-        FS --> Moteur[On-Device Translator\nML Kit]
+        FS --> Moteur["On-Device Translator ML Kit"]
         
-        UI -->|Text (Offline)| Moteur
+        UI -->|Text Offline| Moteur
         Moteur -->|Local Translation| UI
         
-        UI -->|Save History (Private)| SQL[(Offline-First\nSQLite)]
+        UI -->|Save History Private| SQL["Offline-First SQLite"]
     end
 ```
 
