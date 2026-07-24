@@ -26,8 +26,7 @@ class LocalDatabase {
         targetLang TEXT NOT NULL,
         original TEXT NOT NULL,
         translated TEXT NOT NULL,
-        timestamp TEXT NOT NULL,
-        synced INTEGER NOT NULL DEFAULT 0
+        timestamp TEXT NOT NULL
       )
     ''');
   }
@@ -36,18 +35,8 @@ class LocalDatabase {
     final db = await instance.database;
     await db.insert('history', {
       'sourceLang': sourceLang, 'targetLang': targetLang, 'original': original, 'translated': translated,
-      'timestamp': DateTime.now().toIso8601String(), 'synced': 0,
+      'timestamp': DateTime.now().toIso8601String(),
     });
   }
-
-  Future<List<Map<String, dynamic>>> getUnsyncedTranslations() async {
-    final db = await instance.database;
-    return await db.query('history', where: 'synced = ?', whereArgs: [0]);
-  }
-
-  Future<void> markAsSynced(List<int> ids) async {
-    final db = await instance.database;
-    if (ids.isEmpty) return;
-    await db.rawUpdate('UPDATE history SET synced = 1 WHERE id IN (${ids.join(',')})');
-  }
 }
+

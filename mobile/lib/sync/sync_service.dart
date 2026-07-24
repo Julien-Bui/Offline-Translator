@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:google_mlkit_translation/google_mlkit_translation.dart';
 
@@ -29,11 +30,12 @@ class SyncService {
           return newSupportedLanguages;
         }
       }
-      print("Erreur HTTP lors de la récupération du catalogue: ${response.statusCode}");
+      debugPrint("HTTP error fetching catalog: ${response.statusCode}");
       return null;
     } catch (e) {
-      print("Erreur de connexion pour le catalogue: $e");
+      debugPrint("Connection error fetching catalog: $e");
       return null;
     }
   }
 }
+

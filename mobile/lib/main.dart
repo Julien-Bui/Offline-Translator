@@ -163,9 +163,10 @@ class _TranslationScreenState extends State<TranslationScreen> {
         translated: realTranslation,
       );
       // Les données restent uniquement en local (Privacy-First)
-    } catch (e, stackTrace) {
+    } catch (e) {
+      debugPrint("Translation error: $e");
       setState(() {
-        _translatedText = "Erreur: $e\n\nStack: ${stackTrace.toString().substring(0, (stackTrace.toString().length > 500) ? 500 : stackTrace.toString().length)}";
+        _translatedText = "Translation failed. Please check your internet connection and try again.";
         _isTranslating = false;
       });
     }
