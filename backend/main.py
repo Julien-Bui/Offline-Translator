@@ -1,6 +1,5 @@
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
 from pydantic import BaseModel
 import os
 from fastapi.security import APIKeyHeader
@@ -14,11 +13,12 @@ app = FastAPI(title="Offline Translator Cloud Hub", version="1.0")
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 def get_api_key(api_key: str = Depends(api_key_header)):
-    # Mot de passe par défaut pour sécuriser l'API publique
-    admin_key = os.getenv("ADMIN_API_KEY", "offline-translator-admin-123")
+    admin_key = os.getenv("ADMIN_API_KEY")
+    if not admin_key:
+        raise HTTPException(status_code=500, detail="ADMIN_API_KEY not configured on server")
     if api_key == admin_key:
         return api_key
-    raise HTTPException(status_code=403, detail="Clé API administrateur invalide ou manquante")
+    raise HTTPException(status_code=403, detail="Invalid or missing admin API key")
 
 class LanguageItem(BaseModel):
     name: str
