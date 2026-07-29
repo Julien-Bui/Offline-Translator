@@ -2,12 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:google_mlkit_translation/google_mlkit_translation.dart';
-import 'db/local_db.dart';
 import 'sync/sync_service.dart';
+import 'services/image_translator.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await LocalDatabase.instance.database;
   runApp(const OfflineTranslatorApp());
 }
 
@@ -35,10 +34,13 @@ class TranslationScreen extends StatefulWidget {
 class _TranslationScreenState extends State<TranslationScreen> {
   final TextEditingController _inputController = TextEditingController();
   final stt.SpeechToText _speech = stt.SpeechToText();
+  final ImageTranslator _imageTranslator = ImageTranslator();
   
   String _translatedText = "";
   bool _isTranslating = false;
   bool _isListening = false;
+  bool _isProcessingImage = false;
+  String? _ocrRectoText; // Text from front side (for recto-verso)
   
   String _sourceLang = "Français";
   String _targetLang = "Anglais";
@@ -156,13 +158,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
         _isTranslating = false;
       });
 
-      await LocalDatabase.instance.insertTranslation(
-        sourceLang: _sourceLang.substring(0, 2).toLowerCase(),
-        targetLang: _targetLang.substring(0, 2).toLowerCase(),
-        original: text,
-        translated: realTranslation,
-      );
-      // Les données restent uniquement en local (Privacy-First)
+      // Privacy-First: NO history saved, NO data retained
     } catch (e) {
       debugPrint("Translation error: $e");
       setState(() {
@@ -185,7 +181,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
             _inputController.text = val.recognizedWords;
           });
         },
-        localeId: _sttLocales[_sourceLang] ?? "en_US",
+        listenOptions: stt.SpeechListenOptions(localeId: _sttLocales[_sourceLang] ?? "en_US"),
       );
     }
   }
@@ -197,6 +193,129 @@ class _TranslationScreenState extends State<TranslationScreen> {
       _translate();
     }
   }
+
+  /// Requests camera permission with a clear explanation dialog.
+  Future<bool> _requestCameraPermission() async {
+    var status = await Permission.camera.status;
+
+    if (status.isDenied) {
+      if (!mounted) return false;
+      final shouldRequest = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Permission Caméra'),
+          content: const Text(
+            'L\'application a besoin d\'accéder à votre caméra pour photographier du texte et le traduire.\n\n'
+            '📸 La photo est analysée localement puis supprimée immédiatement.\n'
+            '🔒 Aucune image n\'est sauvegardée ni envoyée sur Internet.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Refuser', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange),
+              child: const Text('Autoriser', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ) ?? false;
+
+      if (!shouldRequest) return false;
+      status = await Permission.camera.request();
+    }
+
+    if (status.isPermanentlyDenied) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Caméra refusée. Activez-la dans les Paramètres de votre téléphone.')),
+        );
+      }
+      return false;
+    }
+
+    return status.isGranted;
+  }
+
+  /// Captures a photo, runs OCR, and translates the extracted text.
+  /// This is the "Recto" capture — front side of a document.
+  Future<void> _captureAndTranslate() async {
+    final hasPermission = await _requestCameraPermission();
+    if (!hasPermission) return;
+
+    setState(() {
+      _isProcessingImage = true;
+      _translatedText = "Capture de la photo...";
+      _ocrRectoText = null; // Reset recto-verso state
+    });
+
+    try {
+      setState(() => _translatedText = "Extraction du texte (OCR)...");
+      final extractedText = await _imageTranslator.captureAndExtract();
+
+      if (extractedText == null) {
+        setState(() {
+          _isProcessingImage = false;
+          _translatedText = "";
+        });
+        return; // User cancelled camera
+      }
+
+      // Store recto text for potential verso capture
+      setState(() {
+        _ocrRectoText = extractedText;
+        _inputController.text = extractedText;
+      });
+
+      // Translate immediately
+      await _translate();
+    } catch (e) {
+      debugPrint("Camera OCR error: $e");
+      setState(() {
+        _translatedText = "Erreur lors de l'extraction du texte. Veuillez réessayer.";
+      });
+    } finally {
+      setState(() => _isProcessingImage = false);
+    }
+  }
+
+  /// Captures the back side (verso) of a document, appends text to recto,
+  /// and translates the combined text.
+  Future<void> _captureVerso() async {
+    setState(() {
+      _isProcessingImage = true;
+      _translatedText = "Capture du verso...";
+    });
+
+    try {
+      final versoText = await _imageTranslator.captureAndExtract();
+
+      if (versoText == null) {
+        setState(() => _isProcessingImage = false);
+        return; // User cancelled
+      }
+
+      // Combine recto + verso
+      final combinedText = "${_ocrRectoText ?? ''}\n\n--- Verso ---\n\n$versoText";
+      setState(() {
+        _inputController.text = combinedText;
+        _ocrRectoText = null; // Reset — verso captured, no more captures needed
+      });
+
+      // Translate the full combined text
+      await _translate();
+    } catch (e) {
+      debugPrint("Verso OCR error: $e");
+      setState(() {
+        _translatedText = "Erreur lors de l'extraction du verso. Veuillez réessayer.";
+      });
+    } finally {
+      setState(() => _isProcessingImage = false);
+    }
+  }
+
 
   Widget _buildLanguageDropdown(String currentValue, ValueChanged<String?> onChanged) {
     return DropdownButton<String>(
@@ -320,7 +439,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
                 if (_translatedText.isNotEmpty)
                   Card(
                     elevation: 0,
-                    color: Colors.blueAccent.withOpacity(0.1),
+                    color: Colors.blueAccent.withValues(alpha: 0.1),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     child: Padding(
                       padding: const EdgeInsets.all(20),
@@ -340,35 +459,78 @@ class _TranslationScreenState extends State<TranslationScreen> {
             ),
           ),
           
-          // Mic Button area
+          // Action Buttons Row (Mic + Camera)
           Padding(
             padding: const EdgeInsets.only(bottom: 40),
-            child: GestureDetector(
-              onLongPressStart: (_) => _startListening(),
-              onLongPressEnd: (_) => _stopListening(),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                width: _isListening ? 90 : 70,
-                height: _isListening ? 90 : 70,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: _isListening ? Colors.redAccent : Colors.blueAccent,
-                  boxShadow: [
-                    BoxShadow(
-                      color: (_isListening ? Colors.redAccent : Colors.blueAccent).withOpacity(0.4),
-                      blurRadius: _isListening ? 20 : 10,
-                      spreadRadius: _isListening ? 10 : 2,
-                    )
-                  ],
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Mic Button
+                GestureDetector(
+                  onLongPressStart: (_) => _startListening(),
+                  onLongPressEnd: (_) => _stopListening(),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: _isListening ? 90 : 70,
+                    height: _isListening ? 90 : 70,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _isListening ? Colors.redAccent : Colors.blueAccent,
+                      boxShadow: [
+                        BoxShadow(
+                          color: (_isListening ? Colors.redAccent : Colors.blueAccent).withValues(alpha: 0.4),
+                          blurRadius: _isListening ? 20 : 10,
+                          spreadRadius: _isListening ? 10 : 2,
+                        )
+                      ],
+                    ),
+                    child: const Icon(Icons.mic, color: Colors.white, size: 36),
+                  ),
                 ),
-                child: const Icon(Icons.mic, color: Colors.white, size: 36),
-              ),
+                const SizedBox(width: 30),
+                // Camera Button
+                GestureDetector(
+                  onTap: _isProcessingImage ? null : _captureAndTranslate,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 70,
+                    height: 70,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _isProcessingImage ? Colors.grey : Colors.deepOrange,
+                      boxShadow: [
+                        BoxShadow(
+                          color: (_isProcessingImage ? Colors.grey : Colors.deepOrange).withValues(alpha: 0.4),
+                          blurRadius: 10,
+                          spreadRadius: 2,
+                        )
+                      ],
+                    ),
+                    child: _isProcessingImage
+                        ? const SizedBox(width: 30, height: 30, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))
+                        : const Icon(Icons.camera_alt, color: Colors.white, size: 36),
+                  ),
+                ),
+              ],
             ),
           ),
           if (_isListening)
             const Padding(
               padding: EdgeInsets.only(bottom: 20),
               child: Text("Je vous écoute...", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+            ),
+          if (_ocrRectoText != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 20),
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.flip),
+                label: const Text('Capturer le Verso'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepOrange,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: _isProcessingImage ? null : _captureVerso,
+              ),
             )
         ],
       ),
