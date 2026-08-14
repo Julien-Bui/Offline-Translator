@@ -2,6 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 import os
+import secrets
 from fastapi.security import APIKeyHeader
 
 from .database import engine, get_db, Base
@@ -16,7 +17,7 @@ def get_api_key(api_key: str = Depends(api_key_header)):
     admin_key = os.getenv("ADMIN_API_KEY")
     if not admin_key:
         raise HTTPException(status_code=500, detail="ADMIN_API_KEY not configured on server")
-    if api_key == admin_key:
+    if api_key and secrets.compare_digest(api_key, admin_key):
         return api_key
     raise HTTPException(status_code=403, detail="Invalid or missing admin API key")
 

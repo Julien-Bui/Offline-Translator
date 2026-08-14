@@ -65,10 +65,45 @@ class _TranslationScreenState extends State<TranslationScreen> {
     "Portugais": "pt_PT",
   };
 
+  OnDeviceTranslator? _translator;
+  TranslateLanguage? _currentSourceLang;
+  TranslateLanguage? _currentTargetLang;
+
   @override
   void initState() {
     super.initState();
     _initSpeech();
+    _loadCachedLanguages();
+  }
+
+  @override
+  void dispose() {
+    _inputController.dispose();
+    _speech.stop();
+    _translator?.close();
+    super.dispose();
+  }
+
+  Future<void> _disposeTranslator() async {
+    final oldTranslator = _translator;
+    _translator = null;
+    _currentSourceLang = null;
+    _currentTargetLang = null;
+    if (oldTranslator != null) {
+      await oldTranslator.close();
+    }
+  }
+
+  void _loadCachedLanguages() async {
+    final cachedCatalog = await SyncService.loadCachedCatalog();
+    if (cachedCatalog != null && cachedCatalog.isNotEmpty && mounted) {
+      await _disposeTranslator();
+      setState(() {
+        _supportedLanguages = cachedCatalog;
+        if (!_supportedLanguages.containsKey(_sourceLang)) _sourceLang = _supportedLanguages.keys.first;
+        if (!_supportedLanguages.containsKey(_targetLang)) _targetLang = _supportedLanguages.keys.last;
+      });
+    }
   }
 
   void _initSpeech() async {
@@ -76,13 +111,14 @@ class _TranslationScreenState extends State<TranslationScreen> {
   }
 
   void _swapLanguages() {
+    _disposeTranslator();
     setState(() {
       final temp = _sourceLang;
       _sourceLang = _targetLang;
       _targetLang = temp;
       
       // Swap texts visually as well if translation exists
-      if (_translatedText.isNotEmpty && !_translatedText.startsWith("Erreur")) {
+      if (_translatedText.isNotEmpty && !_translatedText.startsWith("Erreur") && !_translatedText.startsWith("Translation failed")) {
          _inputController.text = _translatedText;
          _translatedText = "";
       }
@@ -149,9 +185,15 @@ class _TranslationScreenState extends State<TranslationScreen> {
 
       setState(() => _translatedText = "Traduction en cours...");
       
-      final translator = OnDeviceTranslator(sourceLanguage: source, targetLanguage: target);
-      final realTranslation = await translator.translateText(text);
-      await translator.close();
+      // Reuse or recreate cached on-device translator for optimal inference latency
+      if (_translator == null || _currentSourceLang != source || _currentTargetLang != target) {
+        await _disposeTranslator();
+        _translator = OnDeviceTranslator(sourceLanguage: source, targetLanguage: target);
+        _currentSourceLang = source;
+        _currentTargetLang = target;
+      }
+
+      final realTranslation = await _translator!.translateText(text);
       
       setState(() {
         _translatedText = realTranslation;
@@ -343,19 +385,22 @@ class _TranslationScreenState extends State<TranslationScreen> {
           IconButton(
             icon: const Icon(Icons.sync, color: Colors.blueAccent),
             onPressed: () async {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Mise à jour du catalogue des langues...'), duration: Duration(seconds: 1)));
+              final messenger = ScaffoldMessenger.of(context);
+              messenger.showSnackBar(const SnackBar(content: Text('Mise à jour du catalogue des langues...'), duration: Duration(seconds: 1)));
               final newCatalog = await SyncService.fetchLanguageCatalog();
-              if (!context.mounted) return;
               
               if (newCatalog != null && newCatalog.isNotEmpty) {
+                await _disposeTranslator();
+                if (!mounted) return;
                 setState(() {
                   _supportedLanguages = newCatalog;
                   if (!_supportedLanguages.containsKey(_sourceLang)) _sourceLang = _supportedLanguages.keys.first;
                   if (!_supportedLanguages.containsKey(_targetLang)) _targetLang = _supportedLanguages.keys.last;
                 });
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Catalogue mis à jour avec succès !')));
+                messenger.showSnackBar(const SnackBar(content: Text('Catalogue mis à jour avec succès !')));
               } else {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erreur réseau ou catalogue indisponible.')));
+                if (!mounted) return;
+                messenger.showSnackBar(const SnackBar(content: Text('Erreur réseau ou catalogue indisponible.')));
               }
             },
           )
@@ -373,7 +418,10 @@ class _TranslationScreenState extends State<TranslationScreen> {
                 Expanded(
                   child: Center(
                     child: _buildLanguageDropdown(_sourceLang, (val) {
-                      if (val != null) setState(() => _sourceLang = val);
+                      if (val != null && val != _sourceLang) {
+                        _disposeTranslator();
+                        setState(() => _sourceLang = val);
+                      }
                     }),
                   ),
                 ),
@@ -384,7 +432,10 @@ class _TranslationScreenState extends State<TranslationScreen> {
                 Expanded(
                   child: Center(
                     child: _buildLanguageDropdown(_targetLang, (val) {
-                      if (val != null) setState(() => _targetLang = val);
+                      if (val != null && val != _targetLang) {
+                        _disposeTranslator();
+                        setState(() => _targetLang = val);
+                      }
                     }),
                   ),
                 ),
