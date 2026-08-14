@@ -72,24 +72,25 @@ cd mobile
 flutter run
 ```
 
-### 3. Créer l'APK Release (Production)
-Pour compiler l'APK autonome prêt à être installé sur n'importe quel smartphone Android :
+### 3. Créer l'APK Optimisé par Architecture (Recommandé : ~35 à 47 Mo)
+Par défaut, `flutter build apk` crée un APK universel lourd (~125 Mo) regroupant toutes les architectures de processeurs. Pour obtenir des APK légers optimisés par architecture :
 ```bash
 cd mobile
-flutter build apk --release
+flutter build apk --split-per-abi
 ```
-L'APK généré sera disponible à l'emplacement :
-```text
-mobile/build/app/outputs/flutter-apk/app-release.apk
-```
+Les APKs générés seront disponibles dans `mobile/build/app/outputs/flutter-apk/` :
+- `app-arm64-v8a-release.apk` (**~47 Mo**) : Pour 99% des smartphones Android modernes (64-bit).
+- `app-armeabi-v7a-release.apk` (**~35 Mo**) : Pour les téléphones 32-bit plus anciens.
+- `app-x86_64-release.apk` (**~50 Mo**) : Pour les émulateurs.
 
-### 4. Installer l'APK directement sur un appareil connecté
+### 4. Installer l'APK sur un appareil connecté
 ```bash
-adb install -r mobile/build/app/outputs/flutter-apk/app-release.apk
+# Pour un smartphone récent (64-bit) :
+adb install -r mobile/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
 ```
 
 ### 5. (Optionnel) Créer un Android App Bundle (Google Play Store)
-Pour une publication sur le Google Play Store avec téléchargements optimisés (~25-30 Mo) :
+Pour une publication sur le Google Play Store où Google distribue automatiquement le découpage optimal (~25-30 Mo par utilisateur) :
 ```bash
 cd mobile
 flutter build appbundle --release
